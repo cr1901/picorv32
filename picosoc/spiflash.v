@@ -43,7 +43,7 @@ module spiflash (
 );
 	localparam verbose = 0;
 	localparam integer latency = 8;
-	
+
 	reg [7:0] buffer;
 	integer bitcount = 0;
 	integer bytecount = 0;
@@ -57,7 +57,7 @@ module spiflash (
 	reg [7:0] spi_out;
 	reg spi_io_vld;
 
-	reg powered_up = 0;
+	reg powered_up = 1;
 
 	localparam [3:0] mode_spi         = 1;
 	localparam [3:0] mode_dspi_rd     = 2;
@@ -102,6 +102,8 @@ module spiflash (
 		$readmemh("firmware.hex", memory);
 	end
 
+	integer eight_or_nine = 8;
+
 	task spi_action;
 		begin
 			spi_in = buffer;
@@ -130,6 +132,22 @@ module spiflash (
 					spi_addr[7:0] = buffer;
 
 				if (bytecount >= 4) begin
+					buffer = memory[spi_addr];
+					spi_addr = spi_addr + 1;
+				end
+			end
+
+			if (powered_up && spi_cmd == 'h 0b) begin
+				if (bytecount == 2)
+					spi_addr[23:16] = buffer;
+
+				if (bytecount == 3)
+					spi_addr[15:8] = buffer;
+
+				if (bytecount == 4)
+					spi_addr[7:0] = buffer;
+
+				if (bytecount >= 6) begin
 					buffer = memory[spi_addr];
 					spi_addr = spi_addr + 1;
 				end
@@ -367,7 +385,10 @@ module spiflash (
 				mode_spi: begin
 					buffer = {buffer, io0};
 					bitcount = bitcount + 1;
-					if (bitcount == 8) begin
+					/* Cheat quite a bit. Litex SPI flash has a default wait of
+					15 dummy cycles. Nothing happens on bytecount == 4/5 so
+					use this opportunity to steal a bit. */
+					if (bitcount == 8 || (spi_cmd == 'h 0b && bytecount == 5 && bitcount == 7)) begin
 						bitcount = 0;
 						bytecount = bytecount + 1;
 						spi_action;
